@@ -1,59 +1,64 @@
-# CI/CD Pipeline Documentation
+# Azure DevOps Pipeline Documentation
 
 ## Overview
 
-This repository uses GitHub Actions for continuous integration and deployment. The pipeline is designed to ensure code quality, security, and functionality of the Fintech Automation Framework.
+This repository uses Azure DevOps Pipelines for continuous integration and deployment. The pipeline is designed to ensure code quality, security, and functionality of the Fintech Automation Framework.
 
-## Workflow: Fintech API Check
+## Pipeline: Fintech API Check
 
 ### Triggers
 
-- **Push**: Main and develop branches
-- **Pull Request**: Main branch
-- **Schedule**: Daily at 6 AM UTC
+- **Branch Triggers**: Main and develop branches
+- **Pull Requests**: Main branch
+- **Scheduled**: Daily at 6 AM UTC
+- **Tags**: All tags
 
-### Jobs
+### Stages
 
-#### 1. API Tests & Security Validation
-- **Matrix**: Tests on Node.js 18.x and 20.x
+#### Stage 1: Build and Test
+
+##### Job 1: API Tests & Security Validation
+- **Strategy**: Matrix testing on Node.js 18.x and 20.x
 - **Steps**:
-  - Install dependencies and Playwright browsers
-  - Create .env from GitHub Secrets
+  - Install Node.js and dependencies
+  - Install Playwright browsers
+  - Create .env from Azure DevOps variables
+  - Validate environment configuration
   - Run API tests with multiple reporters
   - Upload artifacts on failure
 
-#### 2. Security & Infrastructure ID Validation
+##### Job 2: Security & Infrastructure ID Validation
 - **Purpose**: Verify security masking and infrastructure ID protection
 - **Steps**:
   - Run security tests
   - Verify CLIENT_ID masking functionality
   - Check for hardcoded sensitive data
 
-#### 3. Localization & Currency Tests
+##### Job 3: Localization & Currency Tests
 - **Purpose**: Validate currency formatting and internationalization
 - **Steps**:
   - Run transaction tests
   - Test currency formatting for USD/EUR
   - Verify date formatting by currency
 
-#### 4. Code Quality & Linting
+##### Job 4: Code Quality & Linting
 - **Purpose**: Ensure code quality and security
 - **Steps**:
   - TypeScript compilation check
   - Scan for hardcoded passwords
   - Check for unmasked infrastructure IDs
 
-#### 5. Notification
+#### Stage 2: Notification
 - **Purpose**: Provide pipeline status summary
 - **Steps**:
   - Success notification if all jobs pass
   - Failure notification with job status details
 
-## Required GitHub Secrets
+## Required Azure DevOps Variables
 
-To use this CI/CD pipeline, you must configure the following secrets in your GitHub repository:
+To use this pipeline, you must configure the following variables in your Azure DevOps project:
 
-### Environment Variables
+### Environment Variables (Secret Variables)
 - `FINTECH_USERNAME`: Fintech application username
 - `FINTECH_PASSWORD`: Fintech application password
 - `CLIENT_ID`: Infrastructure client ID (will be masked)
@@ -62,22 +67,22 @@ To use this CI/CD pipeline, you must configure the following secrets in your Git
 - `DEFAULT_CURRENCY`: Default currency (optional, defaults to USD)
 - `BASE_URL`: Base URL for API testing (optional, defaults to demo.fintech.com)
 
-### How to Set Up Secrets
+### How to Set Up Variables
 
-1. Go to your repository on GitHub
-2. Click **Settings** tab
-3. Click **Secrets and variables** > **Actions**
-4. Click **New repository secret**
-5. Add each required secret with the exact name
+1. Go to your Azure DevOps project
+2. Navigate to **Pipelines** > **Library**
+3. Click **+ Variable group**
+4. Add each required variable with the exact name
+5. Mark sensitive variables as **secret** (passwords, tokens, IDs)
 
 ## Artifacts
 
 The pipeline generates the following artifacts:
 
-### Test Results (7-day retention)
-- `playwright-report-{node-version}`: HTML report (uploaded on failure)
-- `test-results-{node-version}`: Raw test results
-- `junit-results-{node-version}`: JUnit XML format results
+### Test Results
+- `playwright-report-{nodeVersion}`: HTML report (uploaded on failure)
+- `test-results-{nodeVersion}`: Raw test results
+- `JUnit Results`: Published as test results for Azure DevOps
 
 ## Security Features
 
@@ -92,7 +97,7 @@ The pipeline generates the following artifacts:
 - TypeScript compilation validation
 
 ### Environment Security
-- Uses GitHub Secrets for all sensitive data
+- Uses Azure DevOps secret variables for all sensitive data
 - .env file created securely during pipeline execution
 - No secrets stored in repository
 
@@ -101,7 +106,7 @@ The pipeline generates the following artifacts:
 ### CI/CD Status Badge
 The README.md includes a status badge showing the current pipeline status:
 ```
-![CI/CD Status](https://github.com/Sindhuja-janardhanan-QA/fintech-automation-framework/workflows/Fintech%20API%20Check/badge.svg)
+![Azure DevOps Build Status](https://dev.azure.com/your-organization/your-project/_apis/build/status/your-build-definition?branchName=main)
 ```
 
 ### Notifications
@@ -113,7 +118,7 @@ The README.md includes a status badge showing the current pipeline status:
 
 ### Common Issues
 
-1. **Secrets Not Found**: Ensure all required GitHub Secrets are configured
+1. **Variables Not Found**: Ensure all required Azure DevOps variables are configured in the variable group
 2. **Browser Installation Failures**: Playwright browsers are installed automatically
 3. **API Test Failures**: Check demo.fintech.com availability and BASE_URL configuration
 4. **Masking Test Failures**: Verify CLIENT_ID follows expected pattern
@@ -129,16 +134,33 @@ The README.md includes a status badge showing the current pipeline status:
 
 ### Security
 - Never commit .env files to the repository
-- Use GitHub Secrets for all sensitive data
+- Use Azure DevOps secret variables for all sensitive data
 - Regularly rotate secrets and tokens
 - Review pipeline logs for potential data exposure
 
 ### Performance
 - Use matrix strategy for multiple Node.js versions
 - Cache npm dependencies for faster builds
-- Limit artifact retention to 7 days
+- Limit artifact retention as needed
 
 ### Maintenance
 - Update Node.js versions in matrix as needed
 - Review and update security scanning rules
 - Monitor pipeline performance and optimize as needed
+
+## Integration with Azure DevOps
+
+### Repository Connection
+- This pipeline works with both GitHub and Azure Repos
+- Ensure proper service connections are configured
+- Use appropriate triggers based on your repository type
+
+### Build Numbering
+- Azure DevOps automatically handles build numbering
+- Build numbers are included in artifact names
+- Use semantic versioning for releases
+
+### Releases
+- Pipeline can be extended with deployment stages
+- Use Azure DevOps Releases for production deployments
+- Configure approval gates for critical deployments

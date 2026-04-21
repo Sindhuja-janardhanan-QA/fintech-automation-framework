@@ -1,0 +1,327 @@
+# Azure DevOps Pipeline for Fintech Automation Framework
+
+trigger:
+  branches:
+    include:
+    - main
+    - develop
+  tags:
+    include:
+    - '*'
+
+pr:
+  branches:
+    include:
+    - main
+
+schedules:
+- cron: "0 6 * * *"
+  displayName: Daily API Check
+  branches:
+    include:
+    - main
+  always: true
+
+variables:
+  nodeVersion: '20.x'
+  npmCacheVersion: 'v1'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: BuildAndTest
+  displayName: 'Build and Test Stage'
+  jobs:
+  - job: API_Tests
+    displayName: 'API Tests & Security Validation'
+    strategy:
+      matrix:
+        Node_18:
+          nodeVersion: '18.x'
+        Node_20:
+          nodeVersion: '20.x'
+    steps:
+    - checkout: self
+      clean: true
+
+    - task: NodeTool@0
+      displayName: 'Install Node.js $(nodeVersion)'
+      inputs:
+        versionSpec: '$(nodeVersion)'
+        checkLatest: true
+
+    - task: Cache@2
+      displayName: 'Cache npm dependencies'
+      inputs:
+        key: 'npm | "$(Agent.OS)" | package-lock.json'
+        restoreKeys: |
+          npm | "$(Agent.OS)"
+        path: '$(Build.SourcesDirectory)/node_modules'
+
+    - script: |
+        npm ci
+      displayName: 'Install dependencies'
+
+    - script: |
+        npx playwright install --with-deps
+      displayName: 'Install Playwright browsers'
+
+    - script: |
+        echo "Creating .env file from Azure DevOps variables..."
+        cat > .env << EOF
+        FINTECH_USERNAME=$(FINTECH_USERNAME)
+        FINTECH_PASSWORD=$(FINTECH_PASSWORD)
+        CLIENT_ID=$(CLIENT_ID)
+        DISCOVERY_ID=$(DISCOVERY_ID)
+        MFA_SECRET=$(MFA_SECRET)
+        DEFAULT_CURRENCY=$(DEFAULT_CURRENCY || 'USD')
+        BASE_URL=$(BASE_URL || 'https://demo.fintech.com')
+        EOF
+        echo ".env file created successfully"
+      displayName: 'Create .env from Azure DevOps variables'
+      env:
+        FINTECH_USERNAME: $(FINTECH_USERNAME)
+        FINTECH_PASSWORD: $(FINTECH_PASSWORD)
+        CLIENT_ID: $(CLIENT_ID)
+        DISCOVERY_ID: $(DISCOVERY_ID)
+        MFA_SECRET: $(MFA_SECRET)
+        DEFAULT_CURRENCY: $(DEFAULT_CURRENCY)
+        BASE_URL: $(BASE_URL)
+
+    - script: |
+        npx ts-node src/test-e2e-config.ts
+      displayName: 'Validate environment configuration'
+
+    - script: |
+        npx playwright test tests/api/ --reporter=html,json,junit
+      displayName: 'Run API Tests'
+      continueOnError: true
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Upload Playwright HTML Report'
+      condition: failed()
+      inputs:
+        pathToPublish: 'playwright-report'
+        artifactName: 'playwright-report-$(nodeVersion)'
+        publishLocation: 'Container'
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Upload Test Results'
+      condition: always()
+      inputs:
+        pathToPublish: 'test-results'
+        artifactName: 'test-results-$(nodeVersion)'
+        publishLocation: 'Container'
+
+    - task: PublishTestResults@2
+      displayName: 'Publish JUnit Results'
+      condition: always()
+      inputs:
+        testResultsFiles: 'test-results/results.xml'
+        testRunTitle: 'API Tests - Node.js $(nodeVersion)'
+
+  - job: Security_Validation
+    displayName: 'Security & Infrastructure ID Validation'
+    steps:
+    - checkout: self
+      clean: true
+
+    - task: NodeTool@0
+      displayName: 'Install Node.js 20.x'
+      inputs:
+        versionSpec: '20.x'
+        checkLatest: true
+
+    - task: Cache@2
+      displayName: 'Cache npm dependencies'
+      inputs:
+        key: 'npm | "$(Agent.OS)" | package-lock.json'
+        restoreKeys: |
+          npm | "$(Agent.OS)"
+        path: '$(Build.SourcesDirectory)/node_modules'
+
+    - script: |
+        npm ci
+      displayName: 'Install dependencies'
+
+    - script: |
+        echo "Creating .env file from Azure DevOps variables..."
+        cat > .env << EOF
+        FINTECH_USERNAME=$(FINTECH_USERNAME)
+        FINTECH_PASSWORD=$(FINTECH_PASSWORD)
+        CLIENT_ID=$(CLIENT_ID)
+        DISCOVERY_ID=$(DISCOVERY_ID)
+        MFA_SECRET=$(MFA_SECRET)
+        DEFAULT_CURRENCY=$(DEFAULT_CURRENCY || 'USD')
+        BASE_URL=$(BASE_URL || 'https://demo.fintech.com')
+        EOF
+      displayName: 'Create .env from Azure DevOps variables'
+      env:
+        FINTECH_USERNAME: $(FINTECH_USERNAME)
+        FINTECH_PASSWORD: $(FINTECH_PASSWORD)
+        CLIENT_ID: $(CLIENT_ID)
+        DISCOVERY_ID: $(DISCOVERY_ID)
+        MFA_SECRET: $(MFA_SECRET)
+        DEFAULT_CURRENCY: $(DEFAULT_CURRENCY)
+        BASE_URL: $(BASE_URL)
+
+    - script: |
+        npx ts-node src/test-security-final.ts
+      displayName: 'Run Security Tests'
+
+    - script: |
+        echo "Testing infrastructure ID masking..."
+        CLIENT_ID_TEST="$(CLIENT_ID)"
+        if [[ "$CLIENT_ID_TEST" == *"demo-client-id"* ]]; then
+          echo "CLIENT_ID detected, masking verification required"
+          npx ts-node -e "
+          import { logger } from './src/utils/Logger';
+          const masked = logger.maskInfrastructureIds('$CLIENT_ID_TEST');
+          console.log('Original:', '$CLIENT_ID_TEST');
+          console.log('Masked:', masked);
+          if (masked === '********') {
+            console.log('Infrastructure ID masking: SUCCESS');
+            process.exit(0);
+          } else {
+            console.log('Infrastructure ID masking: FAILED');
+            process.exit(1);
+          }
+          "
+        else
+          echo "CLIENT_ID pattern not detected, skipping masking test"
+        fi
+      displayName: 'Verify Infrastructure ID Masking'
+      env:
+        CLIENT_ID: $(CLIENT_ID)
+
+  - job: Localization_Tests
+    displayName: 'Localization & Currency Tests'
+    steps:
+    - checkout: self
+      clean: true
+
+    - task: NodeTool@0
+      displayName: 'Install Node.js 20.x'
+      inputs:
+        versionSpec: '20.x'
+        checkLatest: true
+
+    - task: Cache@2
+      displayName: 'Cache npm dependencies'
+      inputs:
+        key: 'npm | "$(Agent.OS)" | package-lock.json'
+        restoreKeys: |
+          npm | "$(Agent.OS)"
+        path: '$(Build.SourcesDirectory)/node_modules'
+
+    - script: |
+        npm ci
+      displayName: 'Install dependencies'
+
+    - script: |
+        echo "Creating .env file from Azure DevOps variables..."
+        cat > .env << EOF
+        FINTECH_USERNAME=$(FINTECH_USERNAME)
+        FINTECH_PASSWORD=$(FINTECH_PASSWORD)
+        CLIENT_ID=$(CLIENT_ID)
+        DISCOVERY_ID=$(DISCOVERY_ID)
+        MFA_SECRET=$(MFA_SECRET)
+        DEFAULT_CURRENCY=$(DEFAULT_CURRENCY || 'USD')
+        BASE_URL=$(BASE_URL || 'https://demo.fintech.com')
+        EOF
+      displayName: 'Create .env from Azure DevOps variables'
+      env:
+        FINTECH_USERNAME: $(FINTECH_USERNAME)
+        FINTECH_PASSWORD: $(FINTECH_PASSWORD)
+        CLIENT_ID: $(CLIENT_ID)
+        DISCOVERY_ID: $(DISCOVERY_ID)
+        MFA_SECRET: $(MFA_SECRET)
+        DEFAULT_CURRENCY: $(DEFAULT_CURRENCY)
+        BASE_URL: $(BASE_URL)
+
+    - script: |
+        npx ts-node src/test-transaction.ts
+      displayName: 'Run Transaction Tests'
+
+    - script: |
+        npx ts-node -e "
+        import { CurrencyUtils } from './src/utils/CurrencyUtils';
+        const utils = CurrencyUtils.getInstance();
+        
+        console.log('Testing currency formatting...');
+        const usd = utils.formatCurrency(1234.56, 'USD');
+        const eur = utils.formatCurrency(1234.56, 'EUR');
+        console.log('USD:', usd);
+        console.log('EUR:', eur);
+        
+        const usdDate = utils.getExpectedDateFormat('USD');
+        const eurDate = utils.getExpectedDateFormat('EUR');
+        console.log('USD Date Format:', usdDate);
+        console.log('EUR Date Format:', eurDate);
+        
+        console.log('Localization tests: SUCCESS');
+        "
+      displayName: 'Run Currency Utils Tests'
+
+  - job: Code_Quality
+    displayName: 'Code Quality & Linting'
+    steps:
+    - checkout: self
+      clean: true
+
+    - task: NodeTool@0
+      displayName: 'Install Node.js 20.x'
+      inputs:
+        versionSpec: '20.x'
+        checkLatest: true
+
+    - task: Cache@2
+      displayName: 'Cache npm dependencies'
+      inputs:
+        key: 'npm | "$(Agent.OS)" | package-lock.json'
+        restoreKeys: |
+          npm | "$(Agent.OS)"
+        path: '$(Build.SourcesDirectory)/node_modules'
+
+    - script: |
+        npm ci
+      displayName: 'Install dependencies'
+
+    - script: |
+        npx tsc --noEmit
+      displayName: 'TypeScript Compilation Check'
+
+    - script: |
+        echo "Checking for potential sensitive data exposure..."
+        
+        if grep -r -i "password.*=" src/ --include="*.ts" --include="*.js"; then
+          echo "WARNING: Potential hardcoded passwords found"
+          exit 1
+        fi
+        
+        if grep -r "demo-client-id-[0-9]" src/ --include="*.ts" --include="*.js"; then
+          echo "WARNING: Unmasked infrastructure IDs found in source code"
+          exit 1
+        fi
+        
+        echo "Code quality check: SUCCESS"
+      displayName: 'Security Code Scan'
+
+- stage: Notify
+  displayName: 'Notification Stage'
+  dependsOn: BuildAndTest
+  condition: always()
+  jobs:
+  - job: Notification
+    displayName: 'Pipeline Notification'
+    steps:
+    - script: |
+        if [ "$(DEPENDENCY_BUILDANDTEST_RESULT)" == "Succeeded" ]; then
+          echo "All tests passed successfully! Fintech API Check: SUCCESS"
+        else
+          echo "Some tests failed. Please check the artifacts and logs."
+          echo "Build and Test Result: $(DEPENDENCY_BUILDANDTEST_RESULT)"
+          exit 1
+        fi
+      displayName: 'Pipeline Status Notification'

@@ -1,6 +1,7 @@
 # Fintech Automation Framework
 
-![CI/CD Status](https://github.com/Sindhuja-janardhanan-QA/fintech-automation-framework/workflows/Fintech%20API%20Check/badge.svg)
+![Azure DevOps Build Status](https://dev.azure.com/your-organization/_apis/build/status/your-project?branchName=main)
+![Azure DevOps](https://img.shields.io/badge/Azure%20DevOps-Pipeline-blue)
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-brightgreen)
 ![Playwright](https://img.shields.io/badge/Playwright-1.40%2B-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue)

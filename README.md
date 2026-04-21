@@ -1,5 +1,10 @@
 # Fintech Automation Framework
 
+![CI/CD Status](https://github.com/Sindhuja-janardhanan-QA/fintech-automation-framework/workflows/Fintech%20API%20Check/badge.svg)
+![Node.js](https://img.shields.io/badge/Node.js-18%2B-brightgreen)
+![Playwright](https://img.shields.io/badge/Playwright-1.40%2B-blue)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue)
+
 A secure automation framework for Fintech applications with built-in secret management.
 
 ## 🚀 Quick Start
